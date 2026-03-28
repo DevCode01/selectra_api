@@ -1,0 +1,18 @@
+services:
+  api-elec:
+    image: ${API_ELEC_IMAGE:-api-elec:latest}
+    container_name: api-elec
+    restart: unless-stopped
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks: [eleccompare-net]
+
+networks:
+  eleccompare-net:
+    external: true
+    name: eleccompare-net
