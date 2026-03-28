@@ -17,11 +17,27 @@ jobs:
       - name: Checkout API_elec
         uses: actions/checkout@v4.2.2
 
+      # Récupère uniquement docker-compose.prod.yml depuis le repo ElecCompare
+      # (nécessaire pour que le VPS puisse démarrer le service api-elec)
+      # Si le dépôt est privé, décommenter token: et ajouter le secret GH_PAT
+      - name: Checkout ElecCompare (docker-compose uniquement)
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: ${{ github.repository_owner }}/ElecCompare
+          # token: ${{ secrets.GH_PAT }}
+          path: eleccompare-src
+          sparse-checkout: |
+            /docker-compose.prod.yml
+          sparse-checkout-cone-mode: false
+
       - name: Build Docker image
         run: docker build -t api-elec:${{ github.sha }} -t api-elec:latest .
 
       - name: Save Docker image as archive
         run: docker save api-elec:latest | gzip > api-elec.tar.gz
+
+      - name: Préparer le docker-compose pour l'upload
+        run: cp eleccompare-src/docker-compose.prod.yml docker-compose.prod.yml
 
       - name: Prepare target directory on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -40,7 +56,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key:      ${{ secrets.VPS_SSH_KEY }}
           port:     22
-          source:   "api-elec.tar.gz"
+          source:   "api-elec.tar.gz,docker-compose.prod.yml"
           target:   "~/eleccompare"
           timeout:  120s
 
