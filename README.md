@@ -1,18 +1,18 @@
-# API Tarifs Électricité France
+# French Electricity Tariff API
 
-API REST qui scrape les offres et tarifs des fournisseurs d'électricité en France depuis [Selectra.info](https://selectra.info).
+REST API that scrapes electricity offers and tariffs from French energy providers via [Selectra.info](https://selectra.info).
 
-## Données récupérées
+## Data collected
 
-Pour chaque fournisseur et chaque offre :
-- **Nom du fournisseur**
-- **Nom de l'offre** (ex : Zen Fixe, Tempo, etc.)
-- **Option tarifaire** (Base, Heures Pleines / Heures Creuses, EJP…)
-- **Puissance souscrite** en kVA (3, 6, 9, 12, 15, 18, 24, 30, 36 kVA…)
-- **Tarif d'abonnement** en €/an
-- **Prix du kWh** par type (Base, HP, HC, etc.)
+For each provider and offer:
+- **Provider name**
+- **Offer name** (e.g. Zen Fixe, Tempo, etc.)
+- **Pricing option** (Base, Peak/Off-Peak Hours, EJP…)
+- **Subscribed power** in kVA (3, 6, 9, 12, 15, 18, 24, 30, 36 kVA…)
+- **Subscription fee** in €/year
+- **Price per kWh** by period type (Base, HP, HC, etc.)
 
-## Fournisseurs couverts
+## Supported providers
 
 enercoop, happ-e, edf, geg, plenitude, wekiwi, elmy, alterna, ekwateur, urban-solar-energy, alpiq, totalenergies, vattenfall, primeo, gaz-de-bordeaux, mint-energie, engie, dyneff, octopus-energy, la-bellenergie, ohm-energie, ilek
 
@@ -24,36 +24,36 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Lancement
+## Running
 
 ```bash
 source venv/bin/activate
 uvicorn main:app --reload --port 8000
 ```
 
-L'API démarre, scrape tous les fournisseurs automatiquement, puis rafraîchit les données toutes les 24 h.
+The API starts, scrapes all providers automatically, then refreshes data every 24 hours.
 
-## Documentation interactive
+## Interactive documentation
 
-Ouvrez [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI).
+Open [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI).
 
 ## Endpoints
 
-| Méthode | Route | Description |
-|---------|-------|-------------|
+| Method | Route | Description |
+|--------|-------|-------------|
 | `GET` | `/` | Health check |
-| `GET` | `/providers` | Liste des slugs fournisseurs |
-| `GET` | `/summary` | Résumé du dernier scrape |
-| `GET` | `/tariffs` | Toutes les offres / tous les fournisseurs |
-| `GET` | `/tariffs?kva=6` | Filtrer par puissance |
-| `GET` | `/tariffs?provider=edf` | Filtrer par fournisseur |
-| `GET` | `/tariffs/{slug}` | Offres d'un fournisseur |
-| `GET` | `/tariffs/{slug}?kva=6` | Offres d'un fournisseur pour un kVA |
-| `GET` | `/tariffs/{slug}/offers` | Noms des offres d'un fournisseur |
-| `POST` | `/refresh` | Re-scrape immédiat de tous les fournisseurs |
-| `POST` | `/refresh/{slug}` | Re-scrape d'un fournisseur |
+| `GET` | `/providers` | List of provider slugs |
+| `GET` | `/summary` | Summary of the last scrape |
+| `GET` | `/tariffs` | All offers / all providers |
+| `GET` | `/tariffs?kva=6` | Filter by subscribed power |
+| `GET` | `/tariffs?provider=edf` | Filter by provider |
+| `GET` | `/tariffs/{slug}` | Offers for a specific provider |
+| `GET` | `/tariffs/{slug}?kva=6` | Offers for a provider at a given kVA |
+| `GET` | `/tariffs/{slug}/offers` | Offer names for a provider |
+| `POST` | `/refresh` | Trigger an immediate re-scrape of all providers |
+| `POST` | `/refresh/{slug}` | Trigger a re-scrape for a single provider |
 
-## Exemples de réponse
+## Sample response
 
 ### `GET /tariffs/edf?kva=6`
 
@@ -88,14 +88,13 @@ Ouvrez [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI).
 }
 ```
 
-## Structure du projet
+## Project structure
 
 ```
 API_elec/
-├── main.py          # Application FastAPI
-├── scraper.py       # Logique de scraping
-├── models.py        # Modèles Pydantic
-├── requirements.txt # Dépendances Python
+├── main.py          # FastAPI application
+├── scraper.py       # Scraping logic
+├── models.py        # Pydantic models
+├── requirements.txt # Python dependencies
 └── README.md
 ```
-
