@@ -185,19 +185,33 @@ def _parse_tariff_table(
     if not thead:
         return entries
     header_cells = thead.find_all("th")
-    # Column 0: kVA, Column 1: Abonnement, Columns 2+: kWh types
-    kwh_column_names: List[str] = []
+
+abo_col_idx: Optional[int] = None
+    kwh_columns: List[tuple] = []
+
     for i, th in enumerate(header_cells):
-        if i < 2:
-            continue
-        label = _clean(th.get_text())
-        # Remove "Prix du kWh" prefix and keep the type
-        label = re.sub(r"Prix du kWh\s*", "", label, flags=re.IGNORECASE).strip()
-        if not label:
-            label = "Base"
-        kwh_column_names.append(label)
+        if i == 0:
+            continue  # colonne 0 = kVA/puissance
+        raw = _clean(th.get_text())
+        if re.search(r"\babonnement\b", raw, re.IGNORECASE):
+            abo_col_idx = i
+        elif re.search(r"prix du kwh", raw, re.IGNORECASE):
+            col_label = re.sub(r"Prix du kWh\s*", "", raw, flags=re.IGNORECASE).strip() or "Base"
+            kwh_columns.append((i, col_label))
+
+    # Fallback : table sans marqueurs explicites → col 1 = Abonnement, col 2+ = kWh
+    if abo_col_idx is None:
+        abo_col_idx = 1
+    if not kwh_columns:
+        for i in range(len(header_cells)):
+            if i == 0 or i == abo_col_idx:
+                continue
+            raw = _clean(header_cells[i].get_text())
+            col_label = re.sub(r"Prix du kWh\s*", "", raw, flags=re.IGNORECASE).strip() or "Base"
+            kwh_columns.append((i, col_label))
 
     # Auto-detect option from column headers for caption-less tables
+    kwh_column_names = [label for _, label in kwh_columns]
     col_names_lower = " ".join(kwh_column_names).lower()
     if any(color in col_names_lower for color in ("bleu", "blanc", "rouge")):
         option = "Tempo"
@@ -220,7 +234,6 @@ def _parse_tariff_table(
         kva_text = _clean(cells[0].get_text())
         kva_match = _RE_KVA.search(kva_text)
         if not kva_match:
-            # Try extracting first number
             num_match = re.search(r"\d+", kva_text)
             if not num_match:
                 continue
@@ -229,22 +242,23 @@ def _parse_tariff_table(
             kva = int(kva_match.group(1))
 
         # Abonnement
-        abo_text = _clean(cells[1].get_text())
-        abo_match = _RE_EUR_AN.search(abo_text)
-        abonnement = _parse_float(abo_match.group(1)) if abo_match else None
+        abonnement = None
+        if abo_col_idx < len(cells):
+            abo_text = _clean(cells[abo_col_idx].get_text())
+            abo_match = _RE_EUR_AN.search(abo_text)
+            abonnement = _parse_float(abo_match.group(1)) if abo_match else None
 
         # kWh prices
         kwh_prix: Dict[str, float] = {}
-        for idx, col_name in enumerate(kwh_column_names):
-            col_idx = 2 + idx
+        for col_idx, col_name in kwh_columns:
             if col_idx >= len(cells):
-                break
+                continue
             cell_text = _clean(cells[col_idx].get_text())
             kwh_match = _RE_KWH.search(cell_text)
             if kwh_match:
                 val = _parse_float(kwh_match.group(1))
                 if val is not None:
-                    kwh_prix[col_name if col_name else "Base"] = val
+                    kwh_prix[col_name] = val
 
         if not kwh_prix:
             continue
