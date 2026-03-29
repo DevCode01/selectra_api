@@ -186,7 +186,8 @@ def _parse_tariff_table(
         return entries
     header_cells = thead.find_all("th")
 
-abo_col_idx: Optional[int] = None
+
+    abo_col_idx: Optional[int] = None
     kwh_columns: List[tuple] = []
 
     for i, th in enumerate(header_cells):
