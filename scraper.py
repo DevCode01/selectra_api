@@ -119,6 +119,52 @@ def _parse_caption(caption_text: str, slug: str) -> tuple[str, str]:
     return slug.replace("-", " ").title(), "Base"
 
 
+def _find_table_context(table, slug: str) -> tuple[str, str]:
+    offer_name: Optional[str] = None
+    option: Optional[str] = None
+
+    node = table
+    for _ in range(8):
+        node = node.parent
+        if node is None or node.name in ("[document]", "body", "html"):
+            break
+
+        if option is None:
+            for sib in node.previous_siblings:
+                if not hasattr(sib, "name"):
+                    continue
+                text = _clean(sib.get_text())
+                if re.match(r"^Option\s+\S", text, re.IGNORECASE):
+                    option = re.sub(r"^Option\s+", "", text, flags=re.IGNORECASE).strip()
+                    break
+
+        if offer_name is None:
+            for sib in node.previous_siblings:
+                if not hasattr(sib, "name"):
+                    continue
+                if sib.name in ("h2", "h3", "h4"):
+                    text = _clean(sib.get_text())
+                    m = re.match(r"Tarifs de l[''']offre\s+(.+)", text, re.IGNORECASE)
+                    if m:
+                        offer_name = _clean(m.group(1))
+                        break
+
+        if offer_name is None and "collapse__content" in (node.get("class") or []):
+            for child in node.children:
+                if not hasattr(child, "name") or child.name != "p":
+                    continue
+                text = _clean(child.get_text())
+                m = re.search(r"de l[''']offre\s+(.+?)\s+du fournisseur", text, re.IGNORECASE)
+                if m:
+                    offer_name = _clean(m.group(1))
+                    break
+
+        if offer_name and option:
+            break
+
+    return offer_name or slug.replace("-", " ").title(), option or "Base"
+
+
 def _parse_tariff_table(
     table,
     provider_name: str,
@@ -126,15 +172,13 @@ def _parse_tariff_table(
     source_url: str,
     scraped_at: datetime,
 ) -> List[TariffEntry]:
-    """Parse a single tariff table and return a list of TariffEntry objects."""
     entries: List[TariffEntry] = []
 
     caption_el = table.find("caption")
-    if not caption_el:
-        return entries
-    caption_text = _clean(caption_el.get_text())
-
-    offer_name, option = _parse_caption(caption_text, slug)
+    if caption_el:
+        offer_name, option = _parse_caption(_clean(caption_el.get_text()), slug)
+    else:
+        offer_name, option = _find_table_context(table, slug)
 
     # Determine column mapping from header row
     thead = table.find("thead")
@@ -152,6 +196,16 @@ def _parse_tariff_table(
         if not label:
             label = "Base"
         kwh_column_names.append(label)
+
+    # Auto-detect option from column headers for caption-less tables
+    col_names_lower = " ".join(kwh_column_names).lower()
+    if any(color in col_names_lower for color in ("bleu", "blanc", "rouge")):
+        option = "Tempo"
+    elif not caption_el and option == "Base":
+        has_hp = any("hp" in c.lower() or "heures pleines" in c.lower() for c in kwh_column_names)
+        has_hc = any("hc" in c.lower() or "heures creuses" in c.lower() for c in kwh_column_names)
+        if has_hp and has_hc and not any(c.lower() == "base" for c in kwh_column_names):
+            option = "Heures pleines heures creuses"
 
     tbody = table.find("tbody")
     if not tbody:
