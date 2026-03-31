@@ -85,9 +85,18 @@ def _clean(text: str) -> str:
 
 
 def _parse_float(value: str) -> Optional[float]:
-    """Convert '0,1774' or '177,36' to float."""
-    value = _clean(value).replace(",", ".").replace(" ", "")
+    """Convert French-formatted numbers to float.
+
+    Handles:
+    - '0,1774'   → 0.1774  (comma = decimal separator)
+    - '177,36'   → 177.36
+    - '1.048,92' → 1048.92 (dot = thousand separator, comma = decimal)
+    - '1 048,92' → 1048.92 (space = thousand separator)
+    """
+    value = _clean(value).replace(" ", "")
     try:
+        if "," in value:
+            value = value.replace(".", "").replace(",", ".")
         return float(value)
     except ValueError:
         return None
@@ -190,12 +199,19 @@ def _parse_tariff_table(
     abo_col_idx: Optional[int] = None
     kwh_columns: List[tuple] = []
 
+    abo_is_monthly = False  # True when abonnement column stores monthly value (e.g. ilek VE)
+
     for i, th in enumerate(header_cells):
         if i == 0:
             continue  # colonne 0 = kVA/puissance
         raw = _clean(th.get_text())
         if re.search(r"\babonnement\b", raw, re.IGNORECASE):
             abo_col_idx = i
+        elif re.search(r"\bsubscription\b", raw, re.IGNORECASE):
+            # Colonne d'abonnement mensuel déguisée en kWh par Selectra (ex: ilek VE)
+            # On la capture AVANT le test "prix du kwh" pour ne pas la mettre dans kwh_columns
+            abo_col_idx = i
+            abo_is_monthly = True
         elif re.search(r"prix du kwh", raw, re.IGNORECASE):
             col_label = re.sub(r"Prix du kWh\s*", "", raw, flags=re.IGNORECASE).strip() or "Base"
             kwh_columns.append((i, col_label))
@@ -214,6 +230,17 @@ def _parse_tariff_table(
     # Auto-detect option from column headers for caption-less tables
     kwh_column_names = [label for _, label in kwh_columns]
     col_names_lower = " ".join(kwh_column_names).lower()
+
+    # Ignorer les offres spécialisées Véhicule Électrique (non résidentielles).
+    # Caractéristiques : colonnes avec "ve" en mot isolé (ex: "price kwh hp ve ilek")
+    # ou "shc" (super heures creuses, spécifique VE).
+    if any(
+        re.search(r"\bve\b", c.lower()) or "shc" in c.lower()
+        for c in kwh_column_names
+    ):
+        logger.debug("[Scraper] Table ignorée (offre VE détectée) pour %s – colonnes: %s", slug, kwh_column_names)
+        return entries
+
     if any(color in col_names_lower for color in ("bleu", "blanc", "rouge")):
         option = "Tempo"
     elif not caption_el and option == "Base":
@@ -242,12 +269,21 @@ def _parse_tariff_table(
         else:
             kva = int(kva_match.group(1))
 
-        # Abonnement
+        # Abonnement (colonne détectée dynamiquement)
         abonnement = None
         if abo_col_idx < len(cells):
             abo_text = _clean(cells[abo_col_idx].get_text())
             abo_match = _RE_EUR_AN.search(abo_text)
-            abonnement = _parse_float(abo_match.group(1)) if abo_match else None
+            if abo_match:
+                abonnement = _parse_float(abo_match.group(1))
+            else:
+                # Fallback : valeur en €/kWh qui est en réalité un abonnement mensuel
+                kwh_fallback = _RE_KWH.search(abo_text)
+                if kwh_fallback:
+                    val = _parse_float(kwh_fallback.group(1))
+                    if val is not None:
+                        # Multiplier par 12 si c'est un montant mensuel
+                        abonnement = round(val * 12, 2) if abo_is_monthly else val
 
         # kWh prices
         kwh_prix: Dict[str, float] = {}
