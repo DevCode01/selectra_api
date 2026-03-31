@@ -8,9 +8,29 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  test:
+    name: 🧪 Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout API_elec
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: python -m pytest tests/ -v
+
   build-and-push:
     name: 🔨Build Docker image (api-elec)
     runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - name: Checkout API_elec
